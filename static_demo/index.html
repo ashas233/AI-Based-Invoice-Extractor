@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f7fb">
+  <title>Invoice Extractor — Free Demo</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #172033;
+      background: #f5f7fb;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+    }
+
+    * { box-sizing: border-box; }
+
+    body { margin: 0; min-width: 320px; }
+
+    header {
+      padding: 18px max(24px, calc((100vw - 1060px) / 2));
+      border-bottom: 1px solid #e6eaf1;
+      background: #fff;
+    }
+
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 750; }
+    .brand-icon { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 12px; background: #eaf0ff; font-size: 20px; }
+    main { width: min(1060px, calc(100% - 40px)); margin: 48px auto; }
+    .intro { max-width: 700px; margin-bottom: 28px; }
+    .eyebrow { color: #4a64cb; font-size: 12px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 10px 0; font-size: clamp(32px, 5vw, 46px); letter-spacing: -.04em; }
+    .intro p, .muted { color: #647087; line-height: 1.65; }
+    .notice { margin: 20px 0; padding: 14px 16px; border: 1px solid #d5e0ff; border-radius: 12px; background: #eef3ff; color: #304477; line-height: 1.5; }
+    .workspace { display: grid; grid-template-columns: minmax(0, .88fr) minmax(0, 1.12fr); gap: 18px; align-items: start; }
+    .card { padding: 22px; border: 1px solid #e6eaf1; border-radius: 16px; background: #fff; box-shadow: 0 8px 26px rgb(23 32 51 / 4%); }
+    h2 { margin: 0 0 16px; font-size: 18px; }
+    .sample-paper { padding: 24px; border: 1px solid #e6eaf1; border-radius: 10px; background: linear-gradient(#fff, #fbfcff); }
+    .paper-top { display: flex; justify-content: space-between; gap: 12px; }
+    .paper-title { font-size: 20px; font-weight: 800; }
+    .paper-tag { color: #5a6780; font-size: 12px; }
+    .paper-line { height: 1px; margin: 16px 0; background: #e8ebf2; }
+    .paper-row { display: flex; justify-content: space-between; gap: 14px; margin: 11px 0; color: #46516a; font-size: 14px; }
+    .paper-row.total { color: #172033; font-size: 16px; font-weight: 800; }
+    button { width: 100%; margin-top: 18px; padding: 13px 16px; border: 0; border-radius: 10px; background: #425bd5; color: #fff; cursor: pointer; font: inherit; font-weight: 750; }
+    button:hover { background: #354cc0; }
+    button:focus-visible, input:focus-visible { outline: 3px solid #91a1ff; outline-offset: 2px; }
+    .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    label { display: block; color: #667187; font-size: 12px; font-weight: 700; }
+    input { width: 100%; margin-top: 6px; padding: 10px 11px; border: 1px solid #dce1ea; border-radius: 8px; color: #172033; font: inherit; }
+    input[readonly] { background: #f7f8fb; }
+    .field-wide { grid-column: 1 / -1; }
+    .items { width: 100%; margin: 20px 0 14px; border-collapse: collapse; text-align: left; }
+    .items th, .items td { padding: 10px 6px; border-bottom: 1px solid #edf0f5; font-size: 13px; }
+    .items th { color: #778198; font-size: 11px; text-transform: uppercase; }
+    .items td:last-child, .items th:last-child { text-align: right; }
+    .result { min-height: 24px; margin-top: 14px; color: #1c754a; font-size: 14px; font-weight: 700; }
+    .footnote { margin-top: 20px; color: #818a9c; font-size: 12px; line-height: 1.6; }
+
+    @media (max-width: 720px) {
+      main { margin-top: 30px; }
+      .workspace { grid-template-columns: 1fr; }
+      .fields { grid-template-columns: 1fr; }
+      .field-wide { grid-column: auto; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="brand-icon" aria-hidden="true">📄</span> Invoice Extractor</div>
+  </header>
+  <main>
+    <section class="intro">
+      <div class="eyebrow">Free sample demo</div>
+      <h1>Invoice details, made clear.</h1>
+      <p>Explore a sample invoice and see how structured details can be checked. This public page works without an account, API key, or paid server.</p>
+    </section>
+    <div class="notice"><strong>Sample only:</strong> this is a static interactive preview. It does not upload documents, use AI, or save your information.</div>
+    <section class="workspace" aria-label="Invoice sample demo">
+      <article class="card">
+        <h2>Sample invoice</h2>
+        <div class="sample-paper">
+          <div class="paper-top">
+            <div><div class="paper-title">NORTHWIND</div><div class="paper-tag">DEMO SUPPLIES</div></div>
+            <div class="paper-tag">INVOICE<br><strong>DEMO-2026-001</strong></div>
+          </div>
+          <div class="paper-line"></div>
+          <div class="paper-row"><span>Printer paper × 2</span><strong>$50.00</strong></div>
+          <div class="paper-row"><span>Pens × 1</span><strong>$15.00</strong></div>
+          <div class="paper-line"></div>
+          <div class="paper-row"><span>Subtotal</span><span>$65.00</span></div>
+          <div class="paper-row"><span>Tax</span><span>$5.00</span></div>
+          <div class="paper-row total"><span>Total</span><span>$70.00</span></div>
+        </div>
+        <button id="load-sample" type="button">Load sample details</button>
+      </article>
+      <article class="card" aria-live="polite">
+        <h2>Structured details</h2>
+        <div class="fields">
+          <label class="field-wide">Vendor<input id="vendor" value="" placeholder="Load the sample to begin" readonly></label>
+          <label>Invoice number<input id="invoice-number" value="" placeholder="—" readonly></label>
+          <label>Date<input id="invoice-date" value="" placeholder="—" readonly></label>
+          <label>Currency<input id="currency" value="" placeholder="—" readonly></label>
+          <label>Subtotal<input id="subtotal" value="" placeholder="—" readonly></label>
+          <label>Tax<input id="tax" value="" placeholder="—" readonly></label>
+          <label>Total<input id="total" value="" placeholder="—" readonly></label>
+        </div>
+        <table class="items">
+          <thead><tr><th>Description</th><th>Qty</th><th>Amount</th></tr></thead>
+          <tbody id="line-items"><tr><td colspan="3" class="muted">Sample details appear here.</td></tr></tbody>
+        </table>
+        <div id="result" class="result" role="status"></div>
+        <p class="footnote">This example is fictional. Nothing entered on this page is submitted or stored.</p>
+      </article>
+    </section>
+  </main>
+  <script>
+    const sample = {
+      vendor: "Northwind Demo Supplies",
+      number: "DEMO-2026-001",
+      date: "2026-11-01",
+      currency: "USD",
+      subtotal: 65,
+      tax: 5,
+      total: 70,
+      items: [
+        { description: "Printer paper (demo)", quantity: 2, amount: 50 },
+        { description: "Pens (demo)", quantity: 1, amount: 15 },
+      ],
+    };
+
+    document.getElementById("load-sample").addEventListener("click", () => {
+      document.getElementById("vendor").value = sample.vendor;
+      document.getElementById("invoice-number").value = sample.number;
+      document.getElementById("invoice-date").value = sample.date;
+      document.getElementById("currency").value = sample.currency;
+      document.getElementById("subtotal").value = sample.subtotal.toFixed(2);
+      document.getElementById("tax").value = sample.tax.toFixed(2);
+      document.getElementById("total").value = sample.total.toFixed(2);
+      document.getElementById("line-items").innerHTML = sample.items.map((item) =>
+        `<tr><td>${item.description}</td><td>${item.quantity}</td><td>$${item.amount.toFixed(2)}</td></tr>`
+      ).join("");
+
+      const itemTotal = sample.items.reduce((sum, item) => sum + item.amount, 0);
+      const valid = Math.abs(itemTotal - sample.subtotal) < 0.02
+        && Math.abs(sample.subtotal + sample.tax - sample.total) < 0.02;
+      document.getElementById("result").textContent = valid
+        ? "✓ Sample checks passed: line items and totals match."
+        : "Check the sample arithmetic.";
+    });
+  </script>
+</body>
+</html>

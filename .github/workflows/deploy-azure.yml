@@ -1,0 +1,227 @@
+name: Deploy to Azure Container Apps
+
+on:
+  workflow_dispatch:
+    inputs:
+      enable_public_access:
+        description: Enable public access after Microsoft Entra ID authentication is configured
+        type: boolean
+        required: true
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: azure-container-app-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_NAME_PREFIX: ${{ vars.AZURE_NAME_PREFIX }}
+      AZURE_DEPLOYER_OBJECT_ID: ${{ vars.AZURE_DEPLOYER_OBJECT_ID }}
+      ENABLE_PUBLIC_ACCESS: ${{ inputs.enable_public_access }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ENTRA_CLIENT_ID: ${{ secrets.ENTRA_CLIENT_ID }}
+      ENTRA_TENANT_ID: ${{ secrets.ENTRA_TENANT_ID }}
+      ENTRA_CLIENT_SECRET: ${{ secrets.ENTRA_CLIENT_SECRET }}
+      ENTRA_ALLOWED_USER_OBJECT_ID: ${{ secrets.ENTRA_ALLOWED_USER_OBJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate deployment settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in AZURE_RESOURCE_GROUP AZURE_LOCATION AZURE_NAME_PREFIX AZURE_DEPLOYER_OBJECT_ID ANTHROPIC_API_KEY; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Set the GitHub Actions variable or secret $name."
+              exit 1
+            fi
+          done
+
+          if [[ ! "$AZURE_NAME_PREFIX" =~ ^[a-z0-9]{3,8}$ ]]; then
+            echo "::error::AZURE_NAME_PREFIX must be 3-8 lowercase letters or digits."
+            exit 1
+          fi
+
+          if [[ "$ENABLE_PUBLIC_ACCESS" == "true" ]]; then
+            for name in ENTRA_CLIENT_ID ENTRA_TENANT_ID ENTRA_CLIENT_SECRET ENTRA_ALLOWED_USER_OBJECT_ID; do
+              if [[ -z "${!name}" ]]; then
+                echo "::error::Public access requires the Entra ID GitHub secret $name."
+                exit 1
+              fi
+            done
+          fi
+
+      - name: Provision shared Azure resources
+        id: core
+        shell: bash
+        run: |
+          set -euo pipefail
+          core_json="$(az deployment group create \
+            --name invoice-core \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/core.bicep \
+            --parameters \
+              location="$AZURE_LOCATION" \
+              namePrefix="$AZURE_NAME_PREFIX" \
+              deploymentPrincipalObjectId="$AZURE_DEPLOYER_OBJECT_ID" \
+            --output json)"
+
+          echo "acr_name=$(jq -r '.properties.outputs.acrName.value' <<< "$core_json")" >> "$GITHUB_OUTPUT"
+          echo "acr_login_server=$(jq -r '.properties.outputs.acrLoginServer.value' <<< "$core_json")" >> "$GITHUB_OUTPUT"
+          echo "storage_account_name=$(jq -r '.properties.outputs.storageAccountName.value' <<< "$core_json")" >> "$GITHUB_OUTPUT"
+          echo "environment_name=$(jq -r '.properties.outputs.environmentName.value' <<< "$core_json")" >> "$GITHUB_OUTPUT"
+          echo "identity_name=$(jq -r '.properties.outputs.identityName.value' <<< "$core_json")" >> "$GITHUB_OUTPUT"
+          echo "app_name=$(jq -r '.properties.outputs.appName.value' <<< "$core_json")" >> "$GITHUB_OUTPUT"
+
+      - name: Build and publish application image
+        shell: bash
+        env:
+          ACR_NAME: ${{ steps.core.outputs.acr_name }}
+          ACR_LOGIN_SERVER: ${{ steps.core.outputs.acr_login_server }}
+        run: |
+          set -euo pipefail
+          image="$ACR_LOGIN_SERVER/invoice-extractor:$GITHUB_SHA"
+          authenticated=false
+          for attempt in {1..12}; do
+            if az acr login --name "$ACR_NAME"; then
+              authenticated=true
+              break
+            fi
+            sleep 10
+          done
+          if [[ "$authenticated" != "true" ]]; then
+            echo "::error::Could not authenticate to ACR. Check the AcrPush role assignment."
+            exit 1
+          fi
+          docker build --tag "$image" .
+          docker push "$image"
+          echo "IMAGE_TAG=$GITHUB_SHA" >> "$GITHUB_ENV"
+
+      - name: Deploy privately
+        shell: bash
+        env:
+          ACR_LOGIN_SERVER: ${{ steps.core.outputs.acr_login_server }}
+          STORAGE_ACCOUNT_NAME: ${{ steps.core.outputs.storage_account_name }}
+          ENVIRONMENT_NAME: ${{ steps.core.outputs.environment_name }}
+          IDENTITY_NAME: ${{ steps.core.outputs.identity_name }}
+          APP_NAME: ${{ steps.core.outputs.app_name }}
+        run: |
+          set -euo pipefail
+          umask 077
+          params="$RUNNER_TEMP/invoice-app-parameters.json"
+          trap 'rm -f "$params"' EXIT
+
+          jq -n \
+            --arg location "$AZURE_LOCATION" \
+            --arg appName "$APP_NAME" \
+            --arg environmentName "$ENVIRONMENT_NAME" \
+            --arg acrLoginServer "$ACR_LOGIN_SERVER" \
+            --arg identityName "$IDENTITY_NAME" \
+            --arg storageAccountName "$STORAGE_ACCOUNT_NAME" \
+            --arg imageTag "$IMAGE_TAG" \
+            --arg anthropicApiKey "$ANTHROPIC_API_KEY" \
+            --arg entraClientId "$ENTRA_CLIENT_ID" \
+            --arg entraTenantId "$ENTRA_TENANT_ID" \
+            --arg entraClientSecret "$ENTRA_CLIENT_SECRET" \
+            --arg entraAllowedUserObjectId "$ENTRA_ALLOWED_USER_OBJECT_ID" \
+            --arg enableEntraAuth "$ENABLE_PUBLIC_ACCESS" \
+            '{
+              location: { value: $location },
+              appName: { value: $appName },
+              environmentName: { value: $environmentName },
+              acrLoginServer: { value: $acrLoginServer },
+              identityName: { value: $identityName },
+              storageAccountName: { value: $storageAccountName },
+              imageTag: { value: $imageTag },
+              anthropicApiKey: { value: $anthropicApiKey },
+              enableEntraAuth: { value: ($enableEntraAuth == "true") },
+              publicIngress: { value: false },
+              entraClientId: { value: $entraClientId },
+              entraTenantId: { value: $entraTenantId },
+              entraClientSecret: { value: $entraClientSecret },
+              entraAllowedUserObjectId: { value: $entraAllowedUserObjectId }
+            }' > "$params"
+
+          az deployment group create \
+            --name invoice-app \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/app.bicep \
+            --parameters "@$params" \
+            --output none
+
+      - name: Enable Entra-protected public access
+        if: inputs.enable_public_access
+        shell: bash
+        env:
+          ACR_LOGIN_SERVER: ${{ steps.core.outputs.acr_login_server }}
+          STORAGE_ACCOUNT_NAME: ${{ steps.core.outputs.storage_account_name }}
+          ENVIRONMENT_NAME: ${{ steps.core.outputs.environment_name }}
+          IDENTITY_NAME: ${{ steps.core.outputs.identity_name }}
+          APP_NAME: ${{ steps.core.outputs.app_name }}
+        run: |
+          set -euo pipefail
+          umask 077
+          params="$RUNNER_TEMP/invoice-app-parameters.json"
+          trap 'rm -f "$params"' EXIT
+
+          jq -n \
+            --arg location "$AZURE_LOCATION" \
+            --arg appName "$APP_NAME" \
+            --arg environmentName "$ENVIRONMENT_NAME" \
+            --arg acrLoginServer "$ACR_LOGIN_SERVER" \
+            --arg identityName "$IDENTITY_NAME" \
+            --arg storageAccountName "$STORAGE_ACCOUNT_NAME" \
+            --arg imageTag "$IMAGE_TAG" \
+            --arg anthropicApiKey "$ANTHROPIC_API_KEY" \
+            --arg entraClientId "$ENTRA_CLIENT_ID" \
+            --arg entraTenantId "$ENTRA_TENANT_ID" \
+            --arg entraClientSecret "$ENTRA_CLIENT_SECRET" \
+            --arg entraAllowedUserObjectId "$ENTRA_ALLOWED_USER_OBJECT_ID" \
+            '{
+              location: { value: $location },
+              appName: { value: $appName },
+              environmentName: { value: $environmentName },
+              acrLoginServer: { value: $acrLoginServer },
+              identityName: { value: $identityName },
+              storageAccountName: { value: $storageAccountName },
+              imageTag: { value: $imageTag },
+              anthropicApiKey: { value: $anthropicApiKey },
+              enableEntraAuth: { value: true },
+              publicIngress: { value: true },
+              entraClientId: { value: $entraClientId },
+              entraTenantId: { value: $entraTenantId },
+              entraClientSecret: { value: $entraClientSecret },
+              entraAllowedUserObjectId: { value: $entraAllowedUserObjectId }
+            }' > "$params"
+
+          az deployment group create \
+            --name invoice-app \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --template-file infra/app.bicep \
+            --parameters "@$params" \
+            --output none
+
+      - name: Show app URL
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="$(az deployment group show \
+            --name invoice-app \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query properties.outputs.siteUrl.value \
+            --output tsv)"
+          echo "Deployment URL: $url"

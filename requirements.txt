@@ -1,0 +1,20 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+anthropic>=0.40
+pydantic>=2.6
+pymupdf>=1.24
+pillow>=10.0
+pandas>=2.0
+openpyxl>=3.1
+streamlit>=1.35
+requests>=2.31
+python-dotenv>=1.0
+psycopg[binary]>=3.2
+# vendor normalization (FAISS); set USE_VECTOR=0 to skip
+faiss-cpu>=1.8
+sentence-transformers>=3.0
+# synthetic data generator (eval/make_synthetic.py)
+faker>=24.0
+reportlab>=4.0
+pytest>=8.0
